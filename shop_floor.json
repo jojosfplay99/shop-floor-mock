@@ -1,0 +1,248 @@
+{
+  "name": "shop_floor",
+  "nodes": [
+    {
+      "parameters": {
+        "public": true,
+        "initialMessages": "Hi there!I am your AI Assitant.\n\nHow can I assist you today?",
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.chatTrigger",
+      "typeVersion": 1.4,
+      "position": [
+        -176,
+        -64
+      ],
+      "id": "341d930f-0641-416f-a7c0-929a9df54159",
+      "name": "When chat message received",
+      "webhookId": "5ead563e-fcba-49cf-ba0e-e46bf025d2bd"
+    },
+    {
+      "parameters": {
+        "needsFallback": true,
+        "options": {
+          "systemMessage": "ROLE: ABC Cabinet shop-floor assistant.\nGate: Step1(Workstation) required first. After that, Panel & SOP are independent, any order, any # of times — not a fixed sequence.\n\nTOOL RULES\n- Call tool only w/ input operator gave THIS turn. Never guessed/remembered/prior.\n- Exception: confirmed workstation_id auto-reuses whole session.\n- Panel/SOP request w/ missing required input → ask, STOP, no call.\n- Max 1 attempt/question — no speculative chaining.\n\nDATA\n- Tool fields verbatim: same units/numbers/wording. No reformat/reorder/paraphrase.\n- Missing value → \"not available.\" Never estimate/infer/fabricate (settings/speeds/feeds/tooling/safety incl.).\n\nSESSION\n- Workstation confirmed once → persists till \"home\" or stated station change.\n- \"home\" → wipe workstation/panel/trace → back to Step1.\n\nTRACE (only if tool called this turn, else omit entirely)\n✓ tool_name(\"input\")\n✓ mock_sop(\"WS-01\") — Source: SOP - Panel Saw 1\n✓ escalate_supervisor(\"<issue>\" at <ws>,<panel>) — Logged & Supervisor Notified\n\nSTEP 1 (required, always first): Ask workstation ID/name → mock_workstation.\n Found→confirm(ID,name,dept)→unlocks Panel+SOP.\n Not found→re-ask, no advance.\n\nPANEL (post-Step1, anytime): Ask code/name → mock_panel.\n Not found→re-ask.\n Match ws→print exactly: Panel Code/Cabinet ID/Panel Name/Dimensions \"LxWxT mm\"/Material/Required Operation.\n Mismatch ws→no data; \"doesn't belong here\"→supervisor.\n\nSOP (post-Step1, anytime, repeatable): mock_sop(confirmed workstation_id) — never raw operator text.\n Show full, unedited: Purpose→Procedure→Quality Check→Escalation→Source.\n Not found→say so→supervisor.\n\nGROUNDING: Any SOP content (full or single-field) ends \"Source: <source>.\"\n Fetch this turn if not already fetched. No source field→omit line, never invent.\n Workstation/panel answers: never get source line.\n\nESCALATION: Any unanswerable issue, tool error, LLM/AI error or failure, missing/contradictory data, malfunction, safety concern, or undocumented information → escalate_supervisor(ws_id, issue) → relay logged + notified.\nLIVE ISSUES ALWAYS ESCALATE, even if SOP names the scenario — SOP escalation field = guidance, not proof of notification; agent still must call tool.\nConfirm as done: \"Supervisor has been notified.\" Never instruct operator to notify.\n\nHARD RULES: Never skip Step1 · tool data only, zero fabrication · relay tool errors, offer retry · short/factual, except SOP always shown full · TRACE required whenever a tool was called.\n\nExample output:\n\nConfirmed workstation: WS-01, Panel Saw 1, Cutting.\n\n✓ mock_workstation(\"ws01\")"
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3.1,
+      "position": [
+        32,
+        -64
+      ],
+      "id": "823be80e-8c74-473a-8a7a-f85a2d05bac5",
+      "name": "AI Agent"
+    },
+    {
+      "parameters": {
+        "model": "openai/gpt-oss-safeguard-20b",
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatGroq",
+      "typeVersion": 1,
+      "position": [
+        -208,
+        176
+      ],
+      "id": "a01b9221-3231-41ec-bbf9-53f99c0f77cd",
+      "name": "Groq Chat Model",
+      "credentials": {
+        "groqApi": {
+          "id": "yX14CXA5cn9Yo6UR",
+          "name": "Groq account"
+        }
+      }
+    },
+    {
+      "parameters": {},
+      "type": "@n8n/n8n-nodes-langchain.memoryBufferWindow",
+      "typeVersion": 1.4,
+      "position": [
+        128,
+        176
+      ],
+      "id": "b36f4ce2-c37e-41da-90c5-102769303ca4",
+      "name": "Simple Memory"
+    },
+    {
+      "parameters": {
+        "description": "This tool provides details for each workstation",
+        "jsCode": "const workstations = [\n  { workstation_id: \"WS-01\", name: \"Panel Saw 1\", department: \"Cutting\", operation_type: \"PANEL_CUT\", sequence_position: 1 },\n  { workstation_id: \"WS-03\", name: \"Edge Bander 1\", department: \"Edgebanding\", operation_type: \"EDGE_BAND\", sequence_position: 2 },\n  { workstation_id: \"WS-04\", name: \"CNC Router 1\", department: \"Machining\", operation_type: \"CNC_ROUTING\", sequence_position: 3 },\n  { workstation_id: \"WS-06\", name: \"Drill Press 1\", department: \"Machining\", operation_type: \"DRILLING\", sequence_position: 4 },\n  { workstation_id: \"WS-07\", name: \"Hardware Insertion 1\", department: \"Assembly\", operation_type: \"HARDWARE_INSERT\", sequence_position: 5 }\n];\n\nreturn JSON.stringify(workstations);"
+      },
+      "type": "@n8n/n8n-nodes-langchain.toolCode",
+      "typeVersion": 1.3,
+      "position": [
+        272,
+        176
+      ],
+      "id": "4f1fb6d1-05cd-450c-bafb-dfa76c3e4b57",
+      "name": "mock_workstation"
+    },
+    {
+      "parameters": {
+        "description": "This tool provides details for each panels",
+        "jsCode": "const panels = [\n  { panel_code: \"PNL-001\", cabinet_id: \"CAB-101\", panel_name: \"Left Side Panel\", dimensions: { length_mm: 720, width_mm: 560, thickness_mm: 18 }, material: \"Melamine White\", required_operation: \"panel_cut\", expected_workstation_id: \"WS-01\" },\n  { panel_code: \"PNL-002\", cabinet_id: \"CAB-101\", panel_name: \"Bottom Panel\", dimensions: { length_mm: 580, width_mm: 560, thickness_mm: 18 }, material: \"Melamine White\", required_operation: \"panel_cut\", expected_workstation_id: \"WS-03\" },\n  { panel_code: \"PNL-003\", cabinet_id: \"CAB-102\", panel_name: \"Door Panel A\", dimensions: { length_mm: 715, width_mm: 396, thickness_mm: 18 }, material: \"MDF Oak Veneer\", required_operation: \"cnc_rout\", expected_workstation_id: \"WS-04\" },\n  { panel_code: \"PNL-004\", cabinet_id: \"CAB-102\", panel_name: \"Back Panel\", dimensions: { length_mm: 720, width_mm: 580, thickness_mm: 6 }, material: \"Hardboard\", required_operation: \"cnc_rout\", expected_workstation_id: \"WS-04\" },\n  { panel_code: \"PNL-005\", cabinet_id: \"CAB-103\", panel_name: \"Top Panel\", dimensions: { length_mm: 580, width_mm: 560, thickness_mm: 18 }, material: \"Melamine Grey\", required_operation: \"cnc_rout\", expected_workstation_id: \"WS-04\" },\n  { panel_code: \"PNL-006\", cabinet_id: \"CAB-104\", panel_name: \"Right Side Panel\", dimensions: { length_mm: 720, width_mm: 560, thickness_mm: 18 }, material: \"Melamine Grey\", required_operation: \"hardware_insert\", expected_workstation_id: \"WS-07\" }\n];\n\n\nreturn JSON.stringify(panels);"
+      },
+      "type": "@n8n/n8n-nodes-langchain.toolCode",
+      "typeVersion": 1.3,
+      "position": [
+        400,
+        176
+      ],
+      "id": "c9020c91-426e-4859-9475-9f6036a3724b",
+      "name": "mock_panels"
+    },
+    {
+      "parameters": {
+        "description": "This tool provides SOP",
+        "jsCode": "const workstationSOPs = [\n  {\n    workstation_id: \"WS-01\",\n    name: \"Panel Saw 1\",\n    purpose: \"Cut stock into panel blanks.\",\n    procedure: [\n      \"Confirm workstation + panel (SOP 1-2).\",\n      \"Match material and set saw to specified dimensions.\",\n      \"Cut, check edges for chipping.\",\n      \"Tag panel, move to next_operation.\"\n    ],\n    quality_check: \"Cut dimensions within ±1mm of spec.\",\n    escalation: \"Material/dimension mismatch or damaged stock: set aside, notify supervisor.\"\n  },\n  {\n    workstation_id: \"WS-04\",\n    name: \"CNC Router 1\",\n    purpose: \"Rout panel profiles, cutouts, joinery.\",\n    procedure: [\n      \"Confirm workstation + panel (SOP 1-2).\",\n      \"Load correct CNC program, secure and align panel.\",\n      \"Run program, inspect vs drawing.\",\n      \"Move to next_operation.\"\n    ],\n    quality_check: \"Cutouts match drawing, no tear-out.\",\n    escalation: \"Wrong program, misalignment, tooling issue: stop, notify supervisor.\"\n  },\n  {\n    workstation_id: \"WS-07\",\n    name: \"Hardware Insertion 1\",\n    purpose: \"Insert hinges, cam locks, dowels, hardware.\",\n    procedure: [\n      \"Confirm workstation + panel (SOP 1-2).\",\n      \"Pull correct hardware per spec.\",\n      \"Insert, verify secure fit.\",\n      \"Move to next_operation.\"\n    ],\n    quality_check: \"Hardware flush and secure, no stripped holes.\",\n    escalation: \"Wrong/missing hardware or stripped holes: set aside, notify supervisor.\"\n  }\n];\n\n\n\nreturn JSON.stringify(workstationSOPs);"
+      },
+      "type": "@n8n/n8n-nodes-langchain.toolCode",
+      "typeVersion": 1.3,
+      "position": [
+        512,
+        176
+      ],
+      "id": "ccb46e1f-f608-4123-99f6-3d7d29a62e14",
+      "name": "mock_sop"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Input from agent, e.g. [{ \"input\": \"CNC making unusual noise\", \"workstation_id\": \"WS-01\" }]\nconst issue = $input[0]?.input ?? \"Unspecified issue\";\nconst workstationId = $input[0]?.workstation_id ?? \"Unknown\";\nconst timestamp = new Date().toISOString();\nconst escalationId = `ESC-${Date.now()}`;\n\n// Step 1: Log the issue\nconst log = {\n  step: \"logged\",\n  escalation_id: escalationId,\n  workstation_id: workstationId,\n  issue: issue,\n  timestamp: timestamp\n};\n\n// Step 2: Simulate notifying supervisor (message/call)\nconst notify = {\n  step: \"supervisor_notified\",\n  method: \"message\", // could be \"call\" in a real system if urgency flag is added\n  supervisor: \"Shift Supervisor\",\n  status: \"delivered\",\n  timestamp: new Date().toISOString()\n};\n\nconst result = {\n  escalation_id: escalationId,\n  workstation_id: workstationId,\n  issue: issue,\n  log_status: log.step,\n  notification_status: notify.status,\n  notified_via: notify.method,\n  source: \"Escalation Log\"\n};\n\nreturn JSON.stringify(result);"
+      },
+      "type": "@n8n/n8n-nodes-langchain.toolCode",
+      "typeVersion": 1.3,
+      "position": [
+        640,
+        176
+      ],
+      "id": "878c2f16-6dfe-4898-849b-3a52fdf17c03",
+      "name": "escalate_supervisor"
+    },
+    {
+      "parameters": {
+        "model": "openai/gpt-oss-120b",
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatGroq",
+      "typeVersion": 1,
+      "position": [
+        -32,
+        176
+      ],
+      "id": "f77d22af-08ac-4a6e-8dda-47f72eefe71a",
+      "name": "Groq Chat Model Backup",
+      "credentials": {
+        "groqApi": {
+          "id": "yX14CXA5cn9Yo6UR",
+          "name": "Groq account"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "When chat message received": {
+      "main": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Groq Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Simple Memory": {
+      "ai_memory": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_memory",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "mock_workstation": {
+      "ai_tool": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "mock_panels": {
+      "ai_tool": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "mock_sop": {
+      "ai_tool": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "escalate_supervisor": {
+      "ai_tool": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Groq Chat Model Backup": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_languageModel",
+            "index": 1
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false
+  },
+  "versionId": "39a4695a-7967-4e4c-ae88-3d1a38b17607",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "2cbce59ceb8a30f2145bf61a9742d5443430358f9c855b9fdd308326f1eefe44"
+  },
+  "nodeGroups": [],
+  "id": "Bd6hXFgDiMoDZQKa",
+  "tags": []
+}
